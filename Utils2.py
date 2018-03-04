@@ -1,9 +1,11 @@
 import pandas as pd
-import blpapi
+#import blpapi
 import datetime as dt
 from sqlalchemy import create_engine
 from optparse import OptionParser
 import sqlite3
+import time
+import numpy as np
 
 
 class securityManager(object):
@@ -422,10 +424,23 @@ class cixsManager(securityManager):
         cols = self.CM_df.CIXS_ID
         print(cols)
 
-        df = pd.DataFrame(index=idx, columns=cols)
+        df = pd.DataFrame(index=idx)
         print(df.head())
+        print('Start')
+        cols = cols.tolist()
+        for i in cols[0:20]:
+            print(i)
+            start = time.time()
+            temp = self.getSpreadData(idx, i)
+            # print(len(temp))
+            # print(len(df.index))
+            df = pd.concat([df, temp], axis=1, join_axes=[df.index])
+            stop = time.time()
+            total = stop - start
+            print(total)
 
-        df = self.getSpreadData(idx, cols)
+        print(df.head())
+        print('Final')
         pass
 
     def buildStdDevTable(self):
@@ -464,7 +479,7 @@ class cixsManager(securityManager):
 ########################################################################################################################
 # Table Generating Child Functions
 
-    def getSpreadData(self, dates, cixsList):
+    def getSpreadData(self, dates, cixs):
         '''
         - use cixsMaster to retreive yield anc calc spreads
         - return df that will me merged/joined on the date index
@@ -472,17 +487,33 @@ class cixsManager(securityManager):
             - Will interpolate to fill any further holes
         :return:
         '''
+        # TODO - update the df without re calcing everything
+        shortLeg = cixs.split("_")[0]
+        longLeg = cixs.split("_")[1]
+        start = time.time()
+        shortDF = pd.read_sql_table(shortLeg, con=self.SecEngine, index_col='date', parse_dates={'date': {'format': '%Y-%m-%d'}})
+        stop = time.time()
+        total = stop - start
+        print(total)
+        shortDF.rename(columns={"PX_LAST": shortLeg}, inplace=True)
+        shortDF.drop(labels='id', axis=1, inplace=True)
+        shortDF = shortDF[~shortDF.index.duplicated(keep='first')]
 
-        df = pd.DataFrame(index=dates)
+        longDF = pd.read_sql_table(longLeg, con=self.SecEngine, index_col='date', parse_dates={'date': {'format': '%Y-%m-%d'}})
+        longDF.rename(columns={"PX_LAST": longLeg}, inplace=True)
+        longDF.drop(labels='id', axis=1, inplace=True)
+        longDF = longDF[~longDF.index.duplicated(keep='first')]
 
-        for cixs in cixsList:
-            shortLeg = cixs.split("_")[0]
-            longLeg = cixs.split("_")[1]
-            print(longLeg)
-            print(shortLeg)
-            exit()
 
-        return df
+        tempDF = pd.DataFrame(index=dates)
+
+        tempDF1 = pd.merge(tempDF, shortDF, how='left', left_index=True, right_index=True)
+        tempDF2 = pd.merge(tempDF, longDF, how='left', left_index=True, right_index=True)
+        tempDF3 = pd.merge(tempDF1, tempDF2, how='left', left_index=True, right_index=True)
+        tempDF3[cixs] = tempDF3[longLeg] - tempDF3[shortLeg]
+        tempDF3 = tempDF3[cixs]
+
+        return tempDF3
 
 
 
