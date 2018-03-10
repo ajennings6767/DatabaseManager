@@ -18,290 +18,104 @@ class securityManager(object):
         self.conn = sqlite3.connect(self.db)
         self.cur = self.conn.cursor()
 
-        self.SecEngine = create_engine(r'sqlite:///H:\BOND_TRA\ATJ\Projects\GitHub\DatabaseManager\database.db')
-
-    def parseCmdLine(self):
-        parser = OptionParser(description="Retrieve reference data.")
-        parser.add_option("-a",
-                          "--ip",
-                          dest="host",
-                          help="server name or IP (default: %default)",
-                          metavar="ipAddress",
-                          default="localhost")
-        parser.add_option("-p",
-                          dest="port",
-                          type="int",
-                          help="server port (default: %default)",
-                          metavar="tcpPort",
-                          default=8194)
-
-        (options, args) = parser.parse_args()
-
-        return options
-
-########################################################################################################################
-    def initializeSecDatabase(self):
+    def create_new_table(self, security):
         '''
-        - does db exist
-        - does cixsMaster exist
-        - does spread table exist
+
+        :param security:
         :return:
         '''
-        print('Start initializeSecDatabase()')
-        exists = self.doesSecMasterExist()
-        if exists is True:
-            print("secMaster exists!")
-            self.setSecMasterVar()
-            pass
-        else:
-            print("secMaster does not exist!")
-            self.createSecMaster()
+        # print("Create new table")
+        new_table = "CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, " % (
+        security.SecID)
+        colList = []
+        d = sec.Fields
+        for key1 in d.keys():
+            for key2 in d[key1]:
+                if key2 == "Name":
+                    val = d[key1][key2]
+                    colList.append(val)
 
-        print('Finish initializeSecDatabase()')
-        pass
+        for f in colList:
+            st = f + " REAL, "
+            new_table += st
 
-########################################################################################################################
-# InitializeSecDatabase() Child functions
-    # Called by InitializeSecDatabase()
-    def doesSecMasterExist(self):
-        '''
+        new_table = new_table[:-2]
+        new_table = new_table + ")"
+        # print(new_table)
+        self.cur.execute(new_table)
 
-        :return:
-        '''
-        cmd = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='secMaster'"
-        self.cur.execute(cmd)
-        data = self.cur.fetchone()
-        exists = data[0]
-        if exists == 0:
-            exists = False
-        else:
-            exists = True
-        return exists
-
-    # Called by InitializeSecDatabase()
-    def createSecMaster(self):
-        '''
-        :return:
-        '''
-
-        df = self.generateSecMasterDataframe()
-        df.to_sql("secMaster", con=self.db)
-        print(df.head())
-        pass
-
-    # Called by createSecMaster()
-    # InitializeSecDatabase() --> createSecMaster()
-    def generateSecMasterDataframe(self):
-        '''
-        - Read in excel copy of preliminary secMaster
-        --> This will really just be for initial setup
-        :return:
-        '''
-        # TODO - set up excel file to read in as secMaster
-
-        self.setSecMasterVar()
-        return df
-
-    # Called by either generateSecMasterDataframe() or initializeSecDatabase()
-    def setSecMasterVar(self):
-        '''
-        Sets dataframe version of the secMaster table as a class variable to minimize the excessive reading from the
-        database
-        :return:
-        '''
-        self.SM_df = pd.read_sql_table("secMaster", con=self.SecEngine)
-        pass
-
-########################################################################################################################
-    # Create new table
-    def initializeTable_PX_Last(self):
-        '''
-        - Does the table exist
-        - build the empty table
-        - pull the data
-        - populate the table
-        - insert into database
-        - set as class var
-        :param tableName:
-        :return:
-        '''
-        '''
-        - does db exist
-        - does cixsMaster exist
-        - does spread table exist
-        :return:
-        '''
-        print('Start initializeTable_PX_Last()')
-        exists = self.doesFieldTableExist("PX_LAST")
-        if exists is True:
-            print("PX_LAST exists!")
-            print("Reading PX_LAST into memory...")
-            securityManager.PX_LAST_df = pd.read_sql_table("PX_LAST", con=self.SecEngine, index_col='Date', parse_dates={'Date': "%Y-%m-%d"})
-            print(self.PX_LAST_df.head())
-            pass
-        else:
-            print("PX_LAST does not exist!")
-            self.createTable_PX_LAST()
-            df = securityManager.PX_LAST_df
-            df.to_sql("PX_LAST", con=self.SecEngine, if_exists='replace', index=True)
-
-        print('Finished initializeTable_PX_Last()')
-        pass
-
-########################################################################################################################
-# initializeTable_PX_Last() Child Functions
-    def doesFieldTableExist(self, tableName):
-        '''
-        - Test to see if a table with the passed name exists within the database
-        :return:
-        '''
-        # print("doesFieldTableExist() Start")
-        cmd = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='%s'" % tableName
-        self.cur.execute(cmd)
-        data = self.cur.fetchone()
-        exists = data[0]
-        if exists == 0:
-            exists = False
-        else:
-            exists = True
-        # print(exists)
-        # print("doesFieldTableExist() Finish")
-        return exists
-
-    def createTable_PX_LAST(self):
-        '''
-
-        :return:
-        '''
-        print("createTable_PX_LAST() Start")
-        end = dt.date.today().strftime("%Y%m%d")
-        idx = pd.date_range("19991231", end, freq="B", name="Date")
-
-        cols = self.SM_df.SecID
-        # print(cols)
-
-        df = pd.DataFrame(index=idx, columns=cols)
-        # print(df.head())
-
-        print('Start')
-        cols = cols.tolist()
-        for col in cols:
-            print(col)
-            start = time.time()
-            temp = self.getBBGData(col, "DAILY", "PX_LAST")
-            temp.set_index("date", drop=True, inplace=True)
-            # print(temp.head())
-
-            # print(len(temp))
-            # print(len(df.index))
-            df = pd.concat([df, temp], axis=1, join_axes=[df.index])
-            stop = time.time()
-            total = stop - start
-            print(total)
-
-        # print(df.head())
-        securityManager.PX_LAST_df = df
-        print("createTable_PX_LAST() Finish")
         return
 
-########################################################################################################################
-# createTable_XXX() Child Functions
-    # called by createTable_PX_LAST()
-    def getBBGData(self, sec, freq, field):
+    # need to add a variable to pass the list of fields that need to be added
+    def create_new_field(self, security):
+        '''
 
-        options = self.parseCmdLine()
+        :return:
+        '''
+        # print("Create new field")
+        tableName = security.SecID
+        field = 'llnmvsdf'
+        new_field = "ALTER TABLE " + tableName + " ADD COLUMN " + field + "'float'"
+        self.cur.execute(str(new_field))
+        return
 
-        # Fill SessionOptions
-        sessionOptions = blpapi.SessionOptions()
-        sessionOptions.setServerHost(options.host)
-        sessionOptions.setServerPort(options.port)
+    def does_table_exist(self, security):
+        '''
+        Check if a given security exists within the database. If it doesn't, call the create_new_table
+        function and pass the security as an argument
 
-        print("Connecting to %s:%s" % (options.host, options.port))
-        # Create a Session
-        session = blpapi.Session(sessionOptions)
-
-        # Start a Session
-        if not session.start():
-            print("Failed to start session.")
-            # return
+        :param security:
+        :return:
+        '''
+        tableName = security.SecID
+        self.cur.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=(?)", (tableName,))
+        data = self.cur.fetchone()
+        exists = data[0]
+        if exists == 0:
+            self.create_new_table(security)
+            exists = 'Table Does Not Exist! New Table Created!'
+            # print(exists)
         else:
-            print('Session Started')
+            exists = 'Table Already Exists!'
+            # print(exists)
+        return exists
 
+    def does_field_exist(self, security):
+        '''
+        Check if a given security has a specific field. If not, add that field to the table.
+        :return:
+        '''
+        tableName = security.SecID
+
+        self.cur.execute("SELECT ? FROM sqlite_master", (tableName,))
+        data = self.cur.fetchall()
+        # for i in data:
+        #     print(i)
+
+        # here I need to run through thr gammut of finding all the field names specified by the sec master
+        field = "null"
+        l = []
+        code = "PRAGMA table_info(" + tableName + ")"
+        self.cur.execute(str(code))
+        data1 = self.cur.fetchall()
+        for i in data1:
+            l.append(i[1])
+
+        if field not in l:
+            self.create_new_field(security)
+            exists = 'Field Does Not Exist! New Field Created!'
+        else:
+            exists = 'Field Already Exists!'
+        # print(exists)
+        return exists
+
+    def create_Sec_Master(self, tableDF):
         try:
-            # Open service to get historical data from
-            if not session.openService("//blp/refdata"):
-                print("Failed to open //blp/refdata")
-                # return
-                # Obtain previously opened service
-        except UnboundLocalError as ULE:
-            print(ULE)
-            pass
-
-        refDataService = session.getService("//blp/refdata")
-
-        sd = "19991231"
-        ed = dt.date.today().strftime("%Y%m%d")
-
-        # Create and fill the request for the historical data
-        request = refDataService.createRequest("HistoricalDataRequest")
-
-        request.getElement("securities").appendValue(str(sec) + " INDEX")
-
-        request.getElement('fields').appendValue(field)
-
-        # request.set("periodicityAdjustment", "ACTUAL")
-        request.set("periodicitySelection", freq)
-        request.set("startDate", sd)
-        request.set("endDate", ed)
-        # request.set("maxDataPoints", 100)
-
-        # Send the request
-        session.sendRequest(request)
-
-        # Process received events
-        holdFrame = self.processMessage(session, sec, field)
-
-        # print(holdFrame.head())
-        holdFrame.drop(labels="secID", axis=1, inplace=True)
-        holdFrame.rename(columns={"PX_LAST": sec}, inplace=True)
-        return holdFrame
-
-    def processMessage(self, session, sec, field):
-        # Set various variables equal to various features within BLPAPI
-        # These "names" references keys with the JSON that is returned by BBG after a call
-        SECURITY_DATA = blpapi.Name("securityData")
-        SECURITY = blpapi.Name("security")
-        FIELD_DATA = blpapi.Name("fieldData")
-        FIELD_EXCEPTIONS = blpapi.Name("fieldExceptions")
-        FIELD_ID = blpapi.Name("fieldId")
-        ERROR_INFO = blpapi.Name("errorInfo")
-
-        while (True):
-            ev = session.nextEvent(500)
-            for msg in ev:
-                # print(msg)
-                if ev.eventType() == blpapi.Event.PARTIAL_RESPONSE or ev.eventType() == blpapi.Event.RESPONSE:
-                    secName = msg.getElement(SECURITY_DATA).getElementAsString(SECURITY)
-                    fieldDataArray = msg.getElement(SECURITY_DATA).getElement(FIELD_DATA)
-                    size = fieldDataArray.numValues()
-                    fieldDataList = [fieldDataArray.getValueAsElement(i) for i in range(0, size)]
-                    outDates = [x.getElementAsDatetime('date') for x in fieldDataList]
-                    dateFrame = pd.DataFrame({'date': outDates})
-                    strData = [field]
-                    output = pd.DataFrame(columns=strData)
-                    for strD in strData:
-                        outData = [x.getElementAsFloat(strD) for x in fieldDataList]
-                        output[strD] = outData
-                        output['secID'] = secName
-                        output = pd.concat([output], axis=1)
-                    output = pd.concat([dateFrame, output], axis=1)
-            if ev.eventType() == blpapi.Event.RESPONSE:
-                break
-        return output
-
-
-########################################################################################################################
-
+            tableDF.to_sql("secMaster", con=self.conn, index=False, flavor='sqlite', if_exists="fail")
+            print("secMaster was created!")
+        except ValueError as VE:
+            print("secMaster already exists!")
+        return
 
     def update_Sec_Master(self):
         '''
@@ -390,7 +204,11 @@ class securityManager(object):
             status = "Active"
         return status
 
-
+    def delete_duplicate_rows(self, sec, field):
+        tableName = sec.SecID
+        cmd = "DELETE FROM %s WHERE id NOT IN (SELECT MIN(id) FROM %s GROUP BY date, %s)" % (
+        tableName, tableName, field)
+        self.cur.execute(cmd)
 
     def continue_with_call(self, sec, field):
         cmd = "SELECT MAX(date) FROM %s WHERE %s NOT NULL" % (sec.SecID, field)
@@ -455,38 +273,15 @@ class cixsManager(securityManager):
         print('Finish initializeCIXSDatabase()')
         pass
 
-    def initializeTable_Spread(self):
+    def createFieldTable(self, tableName):
         '''
-        - Does the table exist
-        - build the empty table
-        - pull the data
-        - populate the table
-        - insert into database
-        - set as class var
-        :param tableName:
+        - take field name as argument
+        - create table with date as index, col w/ unique record id, and list of active cixs
+        - populate table
+        -- data cleaning process should be part of this
+        --- interpolate missing values
         :return:
         '''
-        '''
-        - does db exist
-        - does cixsMaster exist
-        - does spread table exist
-        :return:
-        '''
-        print('Start initializeTable_Spread()')
-        exists = self.doesFieldTableExist("Spread")
-        if exists is True:
-            print("Spread exists!")
-            print("Reading Spread into memory...")
-            self.Spread_df = pd.read_sql_table("Spread", con=self.CIXSEngine, index_col='Date', parse_dates={'Date': "%Y-%m-%d"})
-            print(self.Spread_df.head())
-            pass
-        else:
-            print("Spread does not exist!")
-            self.buildSpreadTable()
-            df = self.Spread_df
-            df.to_sql("Spread", con=self.CIXSEngine, if_exists='replace', index=True)
-
-        print('Finished initializeTable_Spread()')
         pass
 
     def updateFieldTable(self):
@@ -496,7 +291,6 @@ class cixsManager(securityManager):
 
         :return:
         '''
-        # TODO - solve updating problem
         pass
 
     def updateAllTables(self):
@@ -597,12 +391,12 @@ class cixsManager(securityManager):
         return df
 
     def setCIXSMasterVar(self):
-        self.CM_df = pd.read_sql_table("cixsMaster", con=self.CIXSEngine)
+        self.CM_df = pd.read_sql_table("cixsMaster", con=self.CIXSEngine, )
         pass
 
     ########################################################################################################################
     # Table Generating Parent Functions
-    # Called by initializeTable_Spread()
+    # Called by createFieldTable()
 
     def buildSpreadTable(self):
         '''
@@ -616,13 +410,13 @@ class cixsManager(securityManager):
         idx = pd.date_range("19991231", end, freq="B", name="Date")
 
         cols = self.CM_df.CIXS_ID
-        # print(cols)
+        print(cols)
 
         df = pd.DataFrame(index=idx)
-        # print(df.head())
+        print(df.head())
         print('Start')
         cols = cols.tolist()
-        for i in cols[0:100]:
+        for i in cols[0:20]:
             print(i)
             start = time.time()
             temp = self.getSpreadData(idx, i)
@@ -634,7 +428,6 @@ class cixsManager(securityManager):
             print(total)
 
         print(df.head())
-        self.Spread_df = df
         print('Final')
         pass
 
@@ -676,7 +469,6 @@ class cixsManager(securityManager):
 
     def getSpreadData(self, dates, cixs):
         '''
-        ***To run this function, the intitializeTable_PX_LAST() function must be run. The PX_LAST_df class variable must be set***
         - use cixsMaster to retreive yield anc calc spreads
         - return df that will me merged/joined on the date index
             - This is a quirk - because it is easiest to just retreive consecutive dates from bbg and filter for business days later
@@ -687,21 +479,20 @@ class cixsManager(securityManager):
         shortLeg = cixs.split("_")[0]
         longLeg = cixs.split("_")[1]
         start = time.time()
-        shortSeries = securityManager.PX_LAST_df[shortLeg]
-        shortDF = pd.DataFrame(data=shortSeries.values, index=shortSeries.index)
+        shortDF = pd.read_sql_table(shortLeg, con=self.SecEngine, index_col='date',
+                                    parse_dates={'date': {'format': '%Y-%m-%d'}})
         stop = time.time()
         total = stop - start
-        # print(total)
-        shortDF.rename(columns={shortDF.columns[0]: shortLeg}, inplace=True)
+        print(total)
+        shortDF.rename(columns={"PX_LAST": shortLeg}, inplace=True)
+        shortDF.drop(labels='id', axis=1, inplace=True)
         shortDF = shortDF[~shortDF.index.duplicated(keep='first')]
 
-        longSeries = securityManager.PX_LAST_df[longLeg]
-        longDF = pd.DataFrame(data=longSeries.values, index=longSeries.index)
-        longDF.rename(columns={longDF.columns[0]: longLeg}, inplace=True)
+        longDF = pd.read_sql_table(longLeg, con=self.SecEngine, index_col='date',
+                                   parse_dates={'date': {'format': '%Y-%m-%d'}})
+        longDF.rename(columns={"PX_LAST": longLeg}, inplace=True)
+        longDF.drop(labels='id', axis=1, inplace=True)
         longDF = longDF[~longDF.index.duplicated(keep='first')]
-
-        # print(shortDF.head())
-        # print(longDF.head())
 
         tempDF = pd.DataFrame(index=dates)
 
@@ -710,7 +501,6 @@ class cixsManager(securityManager):
         tempDF3 = pd.merge(tempDF1, tempDF2, how='left', left_index=True, right_index=True)
         tempDF3[cixs] = tempDF3[longLeg] - tempDF3[shortLeg]
         tempDF3 = tempDF3[cixs]
-        # print(tempDF3.head())
         return tempDF3
 
 
@@ -743,9 +533,6 @@ General Workflows
 
 """
 
-sm = securityManager()
-sm.initializeSecDatabase()
-sm.initializeTable_PX_Last()
 cm = cixsManager()
 cm.initializeCIXSDatabase()
-cm.initializeTable_Spread()
+cm.buildSpreadTable()
