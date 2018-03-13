@@ -489,6 +489,30 @@ class cixsManager(securityManager):
         print('Finished initializeTable_Spread()')
         pass
 
+    def initializeTable_StdDev(self, period):
+        '''
+
+        I can initialize multiple of these by throwing the periods into a list and using a for loop
+        :param period:
+        :return:
+        '''
+        print('Start initializeTable_StdDev()', period)
+        tableName = "StdDev_" + str(period)
+        exists = self.doesFieldTableExist("PX_LAST")
+        if exists is True:
+            print(tableName + " exists!")
+            print("Reading PX_LAST into memory...")
+            df = pd.read_sql_table(tableName, con=self.CIXSEngine, index_col='Date', parse_dates={'Date': "%Y-%m-%d"})
+            print(df.head())
+            pass
+        else:
+            print(tableName + " does not exist!")
+            df = self.buildStdDevTable(period)
+            df.to_sql(tableName, con=self.CIXSEngine, if_exists='replace', index=True)
+
+        print('Finished initializeTable_StdDev()')
+        pass
+
     def updateFieldTable(self):
         '''
         - Can request to update this table but cannot guarantee that all the necessary data will be there
@@ -603,7 +627,6 @@ class cixsManager(securityManager):
     ########################################################################################################################
     # Table Generating Parent Functions
     # Called by initializeTable_Spread()
-
     def buildSpreadTable(self):
         '''
         - index is dates
@@ -622,32 +645,54 @@ class cixsManager(securityManager):
         # print(df.head())
         print('Start')
         cols = cols.tolist()
+        df_list = []
+        start = time.time()
         for i in cols[0:100]:
             print(i)
-            start = time.time()
             temp = self.getSpreadData(idx, i)
+            df_list.append(temp)
             # print(len(temp))
             # print(len(df.index))
-            df = pd.concat([df, temp], axis=1, join_axes=[df.index])
-            stop = time.time()
-            total = stop - start
-            print(total)
+
+        df = pd.concat(df_list, axis=1, join_axes=[df.index])
+        stop = time.time()
+        total = stop - start
+        print(total)
 
         print(df.head())
+        # TODO add appropriate interpolation and fillna functions
         self.Spread_df = df
         print('Final')
         pass
 
-    def buildStdDevTable(self):
+    # Called by initializeTable_StdDev():
+    def buildStdDevTable(self, period):
         end = dt.date.today().strftime("%Y%m%d")
         idx = pd.date_range("19991231", end, freq="B", name="Date")
 
         cols = self.CM_df.CIXS_ID
-        print(cols)
+        # print(cols)
 
         df = pd.DataFrame(index=idx, columns=cols)
-        print(df.head())
-        pass
+        df_list = []
+        start = time.time()
+        for col in cols[0:20]:
+            print(col)
+            temp = self.getStdDev(idx, col, period)
+            df_list.append(temp)
+            # print(len(temp))
+            # print(len(df.index))
+
+            df = pd.concat(df_list, axis=1, join_axes=[df.index])
+
+        df = pd.concat(df_list, axis=1, join_axes=[df.index])
+        stop = time.time()
+        total = stop - start
+        print(total)
+
+        print(df)
+        exit()
+        return df
 
     def buildCorrTable(self):
         end = dt.date.today().strftime("%Y%m%d")
@@ -713,6 +758,21 @@ class cixsManager(securityManager):
         # print(tempDF3.head())
         return tempDF3
 
+    def getStdDev(self, dates, cixs, period):
+        '''
+
+        :param dates:
+        :param cixs:
+        :param period:
+        :return:
+        '''
+        stdDF = self.Spread_df[cixs].rolling(window=period, min_periods=(period - 10).).std()
+        stdDF = pd.DataFrame(data=stdDF.values, index=stdDF.index)
+        stdDF.rename(columns={stdDF.columns[0]: cixs}, inplace=True)
+        tempDF = pd.DataFrame(index=dates)
+        tempDF1 = pd.merge(tempDF, stdDF, how='left', left_index=True, right_index=True)
+        return tempDF1
+
 
 """
 Security object
@@ -749,3 +809,4 @@ sm.initializeTable_PX_Last()
 cm = cixsManager()
 cm.initializeCIXSDatabase()
 cm.initializeTable_Spread()
+cm.initializeTable_StdDev(30)
